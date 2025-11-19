@@ -1,0 +1,28 @@
+# Git attributes for proper line endings
+* text=auto
+
+# Windows batch files should use CRLF and UTF-8 encoding
+*.bat text eol=crlf working-tree-encoding=UTF-8
+
+# Shell scripts should use LF
+*.sh text eol=lf
+
+# Markdown files
+*.md text
+
+# Source code
+*.ts text
+*.tsx text
+*.js text
+*.jsx text
+*.json text
+*.css text
+*.html text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

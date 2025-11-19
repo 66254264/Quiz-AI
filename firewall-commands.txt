@@ -1,0 +1,18 @@
+# Copy and paste these commands into Administrator PowerShell
+
+# Remove old rules
+Remove-NetFirewallRule -DisplayName "Quiz System Frontend" -ErrorAction SilentlyContinue
+Remove-NetFirewallRule -DisplayName "Quiz System Backend" -ErrorAction SilentlyContinue
+
+# Create rules for Public network
+New-NetFirewallRule -DisplayName "Quiz System Frontend (Public)" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Public
+
+New-NetFirewallRule -DisplayName "Quiz System Backend (Public)" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow -Profile Public
+
+# Create rules for Private network
+New-NetFirewallRule -DisplayName "Quiz System Frontend (Private)" -Direction Inbound -LocalPort 3000 -Protocol TCP -Action Allow -Profile Private
+
+New-NetFirewallRule -DisplayName "Quiz System Backend (Private)" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow -Profile Private
+
+# Verify
+Get-NetFirewallRule -DisplayName "*Quiz*" | Select-Object DisplayName, Enabled, Profile
