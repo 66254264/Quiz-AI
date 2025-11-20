@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Question } from '../../types';
 import { questionService, QuestionFilters } from '../../services/questionService';
+import { Pagination } from '../common/Pagination';
 
 interface QuestionListProps {
   onEdit: (question: Question) => void;
@@ -277,29 +278,14 @@ export const QuestionList = ({ onEdit, onDelete, refreshTrigger }: QuestionListP
       </div>
 
       {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex justify-center items-center gap-2 mt-6">
-          <button
-            onClick={() => handlePageChange(pagination.page - 1)}
-            disabled={pagination.page === 1}
-            className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            上一页
-          </button>
-          
-          <span className="text-sm text-gray-600">
-            第 {pagination.page} / {pagination.pages} 页
-          </span>
-          
-          <button
-            onClick={() => handlePageChange(pagination.page + 1)}
-            disabled={pagination.page === pagination.pages}
-            className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            下一页
-          </button>
-        </div>
-      )}
+      <Pagination
+        currentPage={pagination.page}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        itemsPerPage={pagination.limit}
+        onPageChange={handlePageChange}
+        loading={loading}
+      />
     </div>
   );
 };

@@ -62,9 +62,22 @@ export interface SubmitQuizResponse {
 
 export const quizService = {
   // Get all available quizzes for students
-  getAvailableQuizzes: async (): Promise<ApiResponse<{ quizzes: Quiz[] }>> => {
+  getAvailableQuizzes: async (params?: { page?: number; limit?: number }): Promise<ApiResponse<{ 
+    quizzes: Quiz[];
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }>> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const url = `/quizzes${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     // Don't cache quiz list as it changes when students complete quizzes
-    return apiCall<{ quizzes: Quiz[] }>('GET', '/quizzes', undefined, { cache: false });
+    return apiCall('GET', url, undefined, { cache: false });
   },
 
   // Start a quiz session
@@ -104,8 +117,21 @@ export const teacherQuizService = {
   },
 
   // Get all quizzes created by the teacher
-  getTeacherQuizzes: async (): Promise<ApiResponse<{ quizzes: TeacherQuiz[] }>> => {
-    return apiCall<{ quizzes: TeacherQuiz[] }>('GET', '/quizzes/teacher');
+  getTeacherQuizzes: async (params?: { page?: number; limit?: number }): Promise<ApiResponse<{ 
+    quizzes: TeacherQuiz[];
+    pagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }>> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const url = `/quizzes/teacher${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    return apiCall('GET', url);
   },
 
   // Get a single quiz by ID

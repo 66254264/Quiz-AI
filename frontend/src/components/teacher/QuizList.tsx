@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { teacherQuizService, TeacherQuiz } from '../../services/quizService';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { Pagination } from '../common/Pagination';
 
 interface QuizListProps {
   onEdit: (quiz: TeacherQuiz) => void;
@@ -13,20 +14,38 @@ export const QuizList = ({ onEdit, onDelete, refreshTrigger }: QuizListProps) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0
+  });
 
   useEffect(() => {
     fetchQuizzes();
-  }, [refreshTrigger]);
+  }, [pagination.page, refreshTrigger]);
 
   const fetchQuizzes = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await teacherQuizService.getTeacherQuizzes();
+      const response = await teacherQuizService.getTeacherQuizzes({
+        page: pagination.page,
+        limit: pagination.limit
+      });
 
       if (response.success && response.data) {
         setQuizzes(response.data.quizzes);
+        // 更新分页信息
+        const paginationData = response.data.pagination;
+        if (paginationData) {
+          setPagination(prev => ({
+            ...prev,
+            total: paginationData.total,
+            pages: paginationData.totalPages
+          }));
+        }
       } else {
         setError(response.error?.message || '获取测验列表失败');
       }
@@ -35,6 +54,10 @@ export const QuizList = ({ onEdit, onDelete, refreshTrigger }: QuizListProps) =>
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
   };
 
   const handleToggleActive = async (quiz: TeacherQuiz) => {
@@ -87,8 +110,9 @@ export const QuizList = ({ onEdit, onDelete, refreshTrigger }: QuizListProps) =>
   }
 
   return (
-    <div className="space-y-4">
-      {quizzes.map((quiz) => (
+    <div>
+      <div className="space-y-4">
+        {quizzes.map((quiz) => (
         <div
           key={quiz._id}
           className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-4 sm:p-6"
@@ -173,7 +197,18 @@ export const QuizList = ({ onEdit, onDelete, refreshTrigger }: QuizListProps) =>
             </div>
           </div>
         </div>
-      ))}
+        ))}
+      </div>
+
+      {/* 分页组件 */}
+      <Pagination
+        currentPage={pagination.page}
+        totalPages={pagination.pages}
+        totalItems={pagination.total}
+        itemsPerPage={pagination.limit}
+        onPageChange={handlePageChange}
+        loading={loading}
+      />
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { ResponsiveLayout } from '../../components/common/ResponsiveLayout';
 import { quizService } from '../../services/quizService';
 import { Quiz } from '../../types';
 import { QuizCard } from '../../components/student/QuizCard';
+import { Pagination } from '../../components/common/Pagination';
 
 export const QuizList: React.FC = () => {
   const navigate = useNavigate();
@@ -11,23 +12,50 @@ export const QuizList: React.FC = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 6, // 学生端每页显示6个
+    total: 0,
+    pages: 0
+  });
 
   useEffect(() => {
     // Always load fresh data when component mounts or location changes
     console.log('🔄 QuizList mounted or location changed');
     loadQuizzes();
-  }, [location.key]); // Reload when navigation occurs
+  }, [pagination.page, location.key]); // Reload when navigation occurs or page changes
 
   const loadQuizzes = async () => {
     try {
       setLoading(true);
       setError(null);
       console.log('📋 Loading available quizzes...');
-      const response = await quizService.getAvailableQuizzes();
+      const response = await quizService.getAvailableQuizzes({
+        page: pagination.page,
+        limit: pagination.limit
+      });
 
       if (response.success && response.data) {
         console.log('✅ Loaded quizzes:', response.data.quizzes.length);
+        console.log('📊 Pagination data:', response.data.pagination);
         setQuizzes(response.data.quizzes);
+        
+        // 更新分页信息
+        const paginationData = response.data.pagination;
+        if (paginationData) {
+          console.log('📄 Setting pagination:', {
+            total: paginationData.total,
+            pages: paginationData.totalPages,
+            currentPage: pagination.page
+          });
+          setPagination(prev => ({
+            ...prev,
+            total: paginationData.total,
+            pages: paginationData.totalPages
+          }));
+        } else {
+          console.warn('⚠️ No pagination data in response');
+        }
       } else {
         console.error('❌ Failed to load quizzes:', response.error);
         setError(response.error?.message || '加载测验列表失败');
@@ -38,6 +66,12 @@ export const QuizList: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+    // 滚动到顶部
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStartQuiz = (quizId: string) => {
@@ -93,15 +127,27 @@ export const QuizList: React.FC = () => {
           <p className="text-sm sm:text-base text-gray-600">目前没有可以参加的测验，请稍后再试</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {quizzes.map((quiz) => (
-            <QuizCard
-              key={quiz._id}
-              quiz={quiz}
-              onStart={handleStartQuiz}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {quizzes.map((quiz) => (
+              <QuizCard
+                key={quiz._id}
+                quiz={quiz}
+                onStart={handleStartQuiz}
+              />
+            ))}
+          </div>
+
+          {/* 分页组件 */}
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.pages}
+            totalItems={pagination.total}
+            itemsPerPage={pagination.limit}
+            onPageChange={handlePageChange}
+            loading={loading}
+          />
+        </>
       )}
     </ResponsiveLayout>
   );
