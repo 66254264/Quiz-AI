@@ -87,4 +87,37 @@ questionSchema.index({ tags: 1 });
 questionSchema.index({ createdAt: -1 });
 questionSchema.index({ title: 'text', content: 'text' }); // Text search index
 
+// ==========================================
+// 级联删除中间件
+// ==========================================
+
+// 删除问题时，自动删除相关数据
+questionSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const question = await this.model.findOne(this.getFilter());
+    if (question) {
+      console.log(`🗑️  触发级联删除: 问题 ${question._id}`);
+      
+      // 动态导入以避免循环依赖
+      const { QuestionAnalysis } = await import('./QuestionAnalysis');
+      const { QuizSession } = await import('./QuizSession');
+      
+      // 删除 AI 分析
+      await QuestionAnalysis.deleteMany({ questionId: question._id });
+      
+      // 从所有测验中移除该问题
+      await QuizSession.updateMany(
+        { questions: question._id },
+        { $pull: { questions: question._id } }
+      );
+      
+      console.log(`✅ 级联删除完成: 问题 ${question._id}`);
+    }
+    next();
+  } catch (error) {
+    console.error('❌ 级联删除失败:', error);
+    next(error as Error);
+  }
+});
+
 export const Question = mongoose.model<IQuestion>('Question', questionSchema);

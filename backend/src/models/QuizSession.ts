@@ -71,4 +71,38 @@ quizSessionSchema.virtual('questionCount').get(function() {
 // Ensure virtual fields are serialized
 quizSessionSchema.set('toJSON', { virtuals: true });
 
+// ==========================================
+// 级联删除中间件
+// ==========================================
+
+// 删除测验时，自动删除相关数据
+quizSessionSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const quiz = await this.model.findOne(this.getFilter());
+    if (quiz) {
+      console.log(`🗑️  触发级联删除: 测验 ${quiz._id}`);
+      
+      // 动态导入以避免循环依赖
+      const { Submission } = await import('./Submission');
+      const { QuestionAnalysis } = await import('./QuestionAnalysis');
+      
+      // 删除所有提交记录
+      await Submission.deleteMany({ quizId: quiz._id.toString() });
+      
+      // 删除所有问题的 AI 分析
+      if (quiz.questions && quiz.questions.length > 0) {
+        await QuestionAnalysis.deleteMany({ 
+          questionId: { $in: quiz.questions } 
+        });
+      }
+      
+      console.log(`✅ 级联删除完成: 测验 ${quiz._id}`);
+    }
+    next();
+  } catch (error) {
+    console.error('❌ 级联删除失败:', error);
+    next(error as Error);
+  }
+});
+
 export const QuizSession = mongoose.model<IQuizSession>('QuizSession', quizSessionSchema);

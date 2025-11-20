@@ -96,7 +96,6 @@ export const getQuestions = async (req: Request, res: Response) => {
 
     // Build query
     const query: any = { createdBy: userId };
-    console.log('🔒 查询条件 (只显示当前用户创建的题目):', JSON.stringify(query));
 
     if (difficulty) {
       query.difficulty = difficulty;
@@ -109,49 +108,38 @@ export const getQuestions = async (req: Request, res: Response) => {
 
     if (search) {
       console.log('🔍 搜索关键词:', search);
-      // Use regex for more flexible search (works without text index)
       const searchRegex = new RegExp(search as string, 'i');
       query.$or = [
         { title: searchRegex },
         { content: searchRegex },
         { tags: searchRegex }
       ];
-      console.log('🔍 搜索查询条件:', JSON.stringify(query));
     }
 
-    // Pagination
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
+    // 使用优化的分页查询
+    const { paginateQuery } = await import('../utils/queryOptimization');
+    const result = await paginateQuery(
+      Question,
+      query,
+      {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        sort: 'createdAt',
+        order: 'desc'
+      }
+    );
 
-    // Execute query
-    console.log('📊 最终查询条件:', JSON.stringify(query));
-    const questions = await Question.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
-
-    const total = await Question.countDocuments(query);
-    console.log(`✅ 找到 ${questions.length} 条题目，总计 ${total} 条`);
-    
-    // 打印每个题目的创建者ID
-    if (questions.length > 0) {
-      console.log('📋 题目列表:');
-      questions.forEach((q: any, index: number) => {
-        console.log(`  ${index + 1}. ${q.title} (创建者: ${q.createdBy})`);
-      });
-    }
+    console.log(`✅ 找到 ${result.data.length} 条题目，总计 ${result.pagination.total} 条`);
 
     const response: ApiResponse = {
       success: true,
       data: {
-        questions,
+        questions: result.data,
         pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          pages: Math.ceil(total / limitNum)
+          page: result.pagination.page,
+          limit: result.pagination.limit,
+          total: result.pagination.total,
+          pages: result.pagination.totalPages
         }
       }
     };
@@ -330,8 +318,8 @@ export const deleteQuestion = async (req: Request, res: Response) => {
       return res.status(401).json(response);
     }
 
-    // Find and delete question
-    const question = await Question.findOneAndDelete({
+    // 先验证权限
+    const question = await Question.findOne({
       _id: id,
       createdBy: userId
     });
@@ -346,6 +334,10 @@ export const deleteQuestion = async (req: Request, res: Response) => {
       };
       return res.status(404).json(response);
     }
+
+    // 使用级联删除（中间件会自动删除 AI 分析并从测验中移除）
+    await Question.findByIdAndDelete(id);
+    console.log(`✅ 问题及其关联数据已自动删除: ${question.title}`);
 
     const response: ApiResponse = {
       success: true,

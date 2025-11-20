@@ -81,4 +81,46 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// ==========================================
+// 级联删除中间件
+// ==========================================
+
+// 删除用户时，自动删除相关数据
+userSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const user = await this.model.findOne(this.getFilter());
+    if (user) {
+      console.log(`🗑️  触发级联删除: 用户 ${user._id} (${user.role})`);
+      
+      // 动态导入以避免循环依赖
+      const { QuizSession } = await import('./QuizSession');
+      const { Question } = await import('./Question');
+      const { Submission } = await import('./Submission');
+      
+      if (user.role === 'teacher') {
+        // 删除老师创建的所有测验（会触发测验的级联删除）
+        const quizzes = await QuizSession.find({ createdBy: user._id.toString() });
+        for (const quiz of quizzes) {
+          await QuizSession.findByIdAndDelete(quiz._id);
+        }
+        
+        // 删除老师创建的所有问题（会触发问题的级联删除）
+        const questions = await Question.find({ createdBy: user._id.toString() });
+        for (const question of questions) {
+          await Question.findByIdAndDelete(question._id);
+        }
+      } else if (user.role === 'student') {
+        // 删除学生的所有提交记录
+        await Submission.deleteMany({ studentId: user._id.toString() });
+      }
+      
+      console.log(`✅ 级联删除完成: 用户 ${user._id}`);
+    }
+    next();
+  } catch (error) {
+    console.error('❌ 级联删除失败:', error);
+    next(error as Error);
+  }
+});
+
 export const User = mongoose.model<IUser>('User', userSchema);

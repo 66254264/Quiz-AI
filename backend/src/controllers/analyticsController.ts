@@ -84,8 +84,10 @@ export const getQuestionStatistics = async (req: Request, res: Response) => {
     const { quizId } = req.params;
     const { sortBy = 'difficulty', order = 'desc' } = req.query;
 
-    // 获取测验信息 (不要 populate questions，保持为 ObjectId)
-    const quiz = await QuizSession.findById(quizId);
+    // 使用优化的查询获取测验信息
+    const { getQuizWithQuestions } = await import('../utils/queryOptimization');
+    const quiz = await getQuizWithQuestions(quizId);
+    
     if (!quiz) {
       return res.status(404).json({
         success: false,
@@ -96,79 +98,70 @@ export const getQuestionStatistics = async (req: Request, res: Response) => {
       });
     }
 
-    // 获取该测验的所有提交
-    const submissions = await Submission.find({ quizId });
+    // 获取该测验的所有提交（使用 lean() 优化）
+    const submissions = await Submission.find({ quizId }).lean();
     console.log(`📊 Found ${submissions.length} submissions for quiz ${quizId}`);
-    console.log(`📋 Quiz has ${quiz.questions.length} questions`);
+
+    // 批量获取所有问题（避免循环查询）
+    const questionIds = quiz.questions.map((q: any) => q._id);
+    const questions = await Question.find({ _id: { $in: questionIds } }).lean();
+    const questionsMap = new Map(questions.map(q => [q._id.toString(), q]));
 
     // 统计每个题目的数据
-    const questionStats = await Promise.all(
-      quiz.questions.map(async (questionId: any) => {
-        const question = await Question.findById(questionId);
-        if (!question) {
-          console.warn(`⚠️ Question ${questionId} not found`);
-          return null;
-        }
+    const questionStats = questionIds.map((questionId: any) => {
+      const question = questionsMap.get(questionId.toString());
+      if (!question) {
+        console.warn(`⚠️ Question ${questionId} not found`);
+        return null;
+      }
 
-        // 统计该题目的答题情况
-        const questionAnswers = submissions.flatMap(s => 
-          s.answers.filter(a => a.questionId.toString() === questionId.toString())
-        );
+      // 统计该题目的答题情况
+      const questionAnswers = submissions.flatMap(s => 
+        s.answers.filter(a => a.questionId.toString() === questionId.toString())
+      );
 
-        const totalAttempts = questionAnswers.length;
-        const correctAttempts = questionAnswers.filter(a => a.isCorrect).length;
-        const correctRate = totalAttempts > 0 ? (correctAttempts / totalAttempts) * 100 : 0;
+      const totalAttempts = questionAnswers.length;
+      const correctAttempts = questionAnswers.filter(a => a.isCorrect).length;
+      const correctRate = totalAttempts > 0 ? (correctAttempts / totalAttempts) * 100 : 0;
 
-        console.log(`📝 Question ${question.title}:`, {
-          questionId: questionId.toString(),
-          totalSubmissions: submissions.length,
-          totalAttempts,
-          correctAttempts,
-          correctRate: correctRate.toFixed(2) + '%'
-        });
-
-        // 统计每个选项的选择次数
-        const optionStats = question.options.map(option => {
-          const selectedCount = questionAnswers.filter(a => a.selectedAnswer === option.id).length;
-          return {
-            optionId: option.id,
-            optionText: option.text,
-            selectedCount,
-            percentage: totalAttempts > 0 ? (selectedCount / totalAttempts) * 100 : 0,
-            isCorrect: option.id === question.correctAnswer
-          };
-        });
-
+      // 统计每个选项的选择次数
+      const optionStats = question.options.map((option: any) => {
+        const selectedCount = questionAnswers.filter(a => a.selectedAnswer === option.id).length;
         return {
-          questionId: question._id,
-          title: question.title,
-          content: question.content,
-          difficulty: question.difficulty,
-          totalAttempts,
-          correctAttempts,
-          correctRate: Math.round(correctRate * 100) / 100,
-          optionStats
+          optionId: option.id,
+          optionText: option.text,
+          selectedCount,
+          percentage: totalAttempts > 0 ? (selectedCount / totalAttempts) * 100 : 0,
+          isCorrect: option.id === question.correctAnswer
         };
-      })
-    );
+      });
 
-    // 过滤掉 null 值并排序
-    let filteredStats = questionStats.filter(stat => stat !== null);
-    
+      return {
+        questionId: question._id,
+        title: question.title,
+        content: question.content,
+        difficulty: question.difficulty,
+        totalAttempts,
+        correctAttempts,
+        correctRate: Math.round(correctRate * 100) / 100,
+        optionStats
+      };
+    }).filter(stat => stat !== null);
+
     // 排序
     if (sortBy === 'difficulty') {
-      const difficultyOrder = { easy: 1, medium: 2, hard: 3 };
-      filteredStats.sort((a, b) => {
+      const difficultyOrder: any = { easy: 1, medium: 2, hard: 3 };
+      questionStats.sort((a, b) => {
         const orderMultiplier = order === 'asc' ? 1 : -1;
         return (difficultyOrder[a!.difficulty] - difficultyOrder[b!.difficulty]) * orderMultiplier;
       });
     } else if (sortBy === 'correctRate') {
-      filteredStats.sort((a, b) => {
+      questionStats.sort((a, b) => {
         const orderMultiplier = order === 'asc' ? 1 : -1;
         return (a!.correctRate - b!.correctRate) * orderMultiplier;
       });
     } else if (sortBy === 'attempts') {
-      filteredStats.sort((a, b) => {
+      questionStats.sort((a, b) => {
         const orderMultiplier = order === 'asc' ? 1 : -1;
         return (a!.totalAttempts - b!.totalAttempts) * orderMultiplier;
       });
@@ -179,8 +172,8 @@ export const getQuestionStatistics = async (req: Request, res: Response) => {
       data: {
         quizId: quiz._id,
         quizTitle: quiz.title,
-        totalQuestions: filteredStats.length,
-        questionStats: filteredStats
+        totalQuestions: questionStats.length,
+        questionStats
       }
     });
   } catch (error) {
@@ -332,22 +325,35 @@ export const getQuestionAnalyses = async (req: Request, res: Response) => {
     
     console.log('📚 获取测验的所有AI分析结果, quizId:', quizId);
     
-    // 获取该测验的所有分析结果
-    const analyses = await QuestionAnalysis.find({ quizId })
-      .select('questionId analysis createdAt')
-      .lean();
+    // 使用优化的批量查询
+    const { getBatchQuestionAnalyses } = await import('../utils/queryOptimization');
     
-    console.log(`✅ 找到 ${analyses.length} 条分析结果`);
+    // 先获取测验的所有问题ID
+    const quiz = await QuizSession.findById(quizId).select('questions').lean();
+    if (!quiz) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Quiz not found',
+          code: 'QUIZ_NOT_FOUND'
+        }
+      });
+    }
     
-    // 转换为 Map 格式方便前端使用
-    const analysisMap: { [key: string]: string } = {};
-    analyses.forEach(item => {
-      analysisMap[item.questionId.toString()] = item.analysis;
+    const questionIds = quiz.questions.map((id: any) => id.toString());
+    const analysisMap = await getBatchQuestionAnalyses(questionIds);
+    
+    console.log(`✅ 找到 ${analysisMap.size} 条分析结果`);
+    
+    // 转换为对象格式
+    const analysisObject: { [key: string]: string } = {};
+    analysisMap.forEach((value, key) => {
+      analysisObject[key] = value;
     });
     
     res.json({
       success: true,
-      data: analysisMap
+      data: analysisObject
     });
   } catch (error: any) {
     console.error('❌ 获取分析结果时出错:', error.message);

@@ -446,6 +446,7 @@ export const createQuiz = async (req: Request, res: Response) => {
 export const getTeacherQuizzes = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
+    const { page, limit } = req.query;
 
     if (!userId) {
       const response: ApiResponse = {
@@ -458,26 +459,42 @@ export const getTeacherQuizzes = async (req: Request, res: Response) => {
       return res.status(401).json(response);
     }
 
-    const quizzes = await QuizSession.find({ createdBy: userId })
-      .populate('questions', 'title difficulty')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Get submission counts for each quiz
-    const quizzesWithStats = await Promise.all(
-      quizzes.map(async (quiz) => {
-        const submissionCount = await Submission.countDocuments({ quizId: quiz._id });
-        return {
-          ...quiz,
-          submissionCount,
-          questionCount: quiz.questions.length
-        };
-      })
+    // 使用优化的分页查询
+    const { paginateQuery } = await import('../utils/queryOptimization');
+    const result = await paginateQuery(
+      QuizSession,
+      { createdBy: userId },
+      {
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 10,
+        sort: 'createdAt',
+        order: 'desc'
+      }
     );
+
+    // Get submission counts for each quiz (批量查询优化)
+    const quizIds = result.data.map((q: any) => q._id);
+    const submissionCounts = await Submission.aggregate([
+      { $match: { quizId: { $in: quizIds.map(id => id.toString()) } } },
+      { $group: { _id: '$quizId', count: { $sum: 1 } } }
+    ]);
+
+    const submissionMap = new Map(
+      submissionCounts.map(item => [item._id.toString(), item.count])
+    );
+
+    const quizzesWithStats = result.data.map((quiz: any) => ({
+      ...quiz,
+      submissionCount: submissionMap.get(quiz._id.toString()) || 0,
+      questionCount: quiz.questions?.length || 0
+    }));
 
     const response: ApiResponse = {
       success: true,
-      data: { quizzes: quizzesWithStats }
+      data: {
+        quizzes: quizzesWithStats,
+        pagination: result.pagination
+      }
     };
 
     res.status(200).json(response);
@@ -653,25 +670,15 @@ export const deleteQuiz = async (req: Request, res: Response) => {
       return res.status(404).json(response);
     }
 
-    // 删除相关的提交记录
-    const deletedSubmissions = await Submission.deleteMany({ quizId: id });
-    console.log(`🗑️ 删除了 ${deletedSubmissions.deletedCount} 条提交记录`);
-
-    // 删除相关的题目分析数据
-    const deletedAnalyses = await QuestionAnalysis.deleteMany({ quizId: id });
-    console.log(`🗑️ 删除了 ${deletedAnalyses.deletedCount} 条分析数据`);
-
-    // 最后删除测验本身
+    // 使用级联删除（中间件会自动删除关联数据）
     await QuizSession.findByIdAndDelete(id);
-    console.log(`🗑️ 删除了测验: ${quiz.title}`);
+    console.log(`✅ 测验及其关联数据已自动删除: ${quiz.title}`);
 
     const response: ApiResponse = {
       success: true,
       data: {
         message: '测验及相关数据删除成功',
-        quizId: id,
-        deletedSubmissions: deletedSubmissions.deletedCount,
-        deletedAnalyses: deletedAnalyses.deletedCount
+        quizId: id
       }
     };
 
