@@ -1,5 +1,5 @@
 import { apiCall } from '../utils/api';
-import type { ApiResponse, User, LoginCredentials, RegisterData, AuthTokens } from '../types';
+import type { ApiResponse, User, LoginCredentials, RegisterData } from '../types';
 
 export interface LoginResponse {
   user: User;

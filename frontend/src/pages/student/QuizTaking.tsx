@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ResponsiveLayout } from '../../components/common/ResponsiveLayout';
-import { quizService, QuizWithQuestions } from '../../services/quizService';
+import { quizService } from '../../services/quizService';
 import { QuestionDisplay } from '../../components/student/QuestionDisplay';
 import { QuizProgress } from '../../components/student/QuizProgress';
 

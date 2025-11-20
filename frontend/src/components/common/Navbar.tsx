@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -11,7 +11,6 @@ interface NavbarProps {
 export const Navbar = ({ role, onMenuToggle }: NavbarProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const toast = useToast();
 

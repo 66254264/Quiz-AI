@@ -12,20 +12,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false, // Disable sourcemaps in production for smaller bundle
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true, // Remove console.log in production
-        drop_debugger: true,
-      },
-    },
+    minify: 'esbuild', // Use esbuild for faster builds
+    target: 'es2015',
     rollupOptions: {
       output: {
         // Manual chunk splitting for better caching
         manualChunks: {
           // Vendor chunks
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'ui-vendor': ['@headlessui/react'],
           // Feature chunks
           'teacher': [
             './src/pages/teacher/QuestionManagement.tsx',

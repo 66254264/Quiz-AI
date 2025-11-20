@@ -89,3 +89,44 @@ npm run dev
 ├── package.json       # 根项目配置
 └── README.md         # 项目说明
 ```
+
+## 生产环境部署
+
+### 阿里云部署
+
+本项目提供完整的阿里云部署方案，支持一键部署到 Alibaba Cloud Linux 服务器。
+
+#### 快速开始
+
+```bash
+# 1. 初始化服务器（首次部署）
+sudo bash setup-aliyun-server.sh
+
+# 2. 部署应用
+bash deploy-aliyun.sh
+```
+
+#### 部署文档
+
+- 📚 [阿里云部署完整指南](ALIYUN_DEPLOYMENT_GUIDE.md) - 详细的部署步骤和配置说明
+- 🚀 [快速开始指南](ALIYUN_QUICK_START.md) - 10分钟快速部署
+- ✅ [部署检查清单](DEPLOYMENT_CHECKLIST.md) - 确保部署万无一失
+
+#### 部署脚本
+
+- `setup-aliyun-server.sh` - 服务器环境初始化脚本
+- `deploy-aliyun.sh` - 应用部署和更新脚本
+- `ecosystem.config.js` - PM2 进程管理配置
+- `nginx.conf.template` - Nginx 配置模板
+
+#### 技术栈
+
+- **服务器**: Alibaba Cloud Linux
+- **Web服务器**: Nginx
+- **进程管理**: PM2
+- **数据库**: MongoDB
+- **SSL证书**: Let's Encrypt / 阿里云SSL
+
+### 其他云平台
+
+项目也可以部署到其他云平台（AWS、腾讯云、华为云等），请参考阿里云部署指南进行相应调整。
